@@ -1,0 +1,5 @@
+export type Status = 'ORDER_RECEIVED'|'DESIGNING'|'CUTTING_AND_PRINTING'|'MAKING'|'PACKING_AND_DISPATCH'|'COMPLETED';
+export type User = { id:string; name:string; email:string; role:'ADMIN'|'EMPLOYEE' };
+export type Order = { id:string; orderNumber:string; customerName:string; customerEmail?:string; description:string; quantity:number; dueDate?:string; priority:number; status:Status; createdAt:string; updatedAt:string; assignments:{user:User}[]; shipment?:{carrier?:string;trackingNumber?:string}; statusHistory?:{id:string;fromStatus?:Status;toStatus:Status;note?:string;createdAt:string;changedBy:{name:string}}[]; files?:{id:string;name:string;url:string;kind:string}[] };
+export const STATUS_LABEL: Record<Status,string> = { ORDER_RECEIVED:'Order received', DESIGNING:'Designing', CUTTING_AND_PRINTING:'Cutting & printing', MAKING:'Making', PACKING_AND_DISPATCH:'Packing & dispatch', COMPLETED:'Completed' };
+export const FLOW: Status[] = ['ORDER_RECEIVED','DESIGNING','CUTTING_AND_PRINTING','MAKING','PACKING_AND_DISPATCH','COMPLETED'];

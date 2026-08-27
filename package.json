@@ -1,0 +1,15 @@
+{
+  "name": "oms",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @oms/api\" \"npm run dev -w @oms/web\"",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "db:generate": "npm run prisma:generate -w @oms/api",
+    "db:migrate": "cd apps/api && npx prisma migrate dev",
+    "db:seed": "npm run prisma:seed -w @oms/api"
+  },
+  "devDependencies": { "concurrently": "^9.1.2" }
+}

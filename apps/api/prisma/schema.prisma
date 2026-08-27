@@ -1,0 +1,110 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum OrderStatus {
+  ORDER_RECEIVED
+  DESIGNING
+  CUTTING_AND_PRINTING
+  MAKING
+  PACKING_AND_DISPATCH
+  COMPLETED
+}
+
+enum FileKind {
+  ARTWORK
+  REFERENCE
+  PRODUCTION
+  SHIPPING
+  OTHER
+}
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  name String
+  passwordHash String
+  role Role @default(EMPLOYEE)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  assignments OrderAssignment[]
+  statusChanges OrderStatusHistory[] @relation("ChangedBy")
+}
+
+model Order {
+  id String @id @default(cuid())
+  orderNumber String @unique
+  customerName String
+  customerEmail String?
+  customerPhone String?
+  description String
+  quantity Int @default(1)
+  dueDate DateTime?
+  status OrderStatus @default(ORDER_RECEIVED)
+  priority Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  assignments OrderAssignment[]
+  statusHistory OrderStatusHistory[]
+  files FileRecord[]
+  shipment Shipment?
+}
+
+model OrderAssignment {
+  orderId String
+  userId String
+  assignedAt DateTime @default(now())
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([orderId, userId])
+}
+
+model OrderStatusHistory {
+  id String @id @default(cuid())
+  orderId String
+  fromStatus OrderStatus?
+  toStatus OrderStatus
+  note String?
+  changedById String
+  createdAt DateTime @default(now())
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedBy User @relation("ChangedBy", fields: [changedById], references: [id])
+  @@index([orderId, createdAt])
+}
+
+model FileRecord {
+  id String @id @default(cuid())
+  orderId String
+  name String
+  url String
+  mimeType String?
+  kind FileKind @default(OTHER)
+  createdAt DateTime @default(now())
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Shipment {
+  id String @id @default(cuid())
+  orderId String @unique
+  carrier String?
+  trackingNumber String?
+  shippedAt DateTime?
+  deliveryAddress String?
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
