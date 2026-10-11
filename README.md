@@ -1,8 +1,10 @@
 # Order Management System (OMS)
 
-An internal application for manually managed orders. It follows the required lifecycle:
+An internal application for manually managed orders with Admin, Manager, and Staff access. New orders use New, Assigned, In Progress, Pending, Completed, and Cancelled statuses. Existing production-stage orders and their histories remain supported.
 
-`ORDER_RECEIVED → DESIGNING → CUTTING_AND_PRINTING → MAKING → PACKING_AND_DISPATCH → COMPLETED`
+Admins manage orders, users, roles, and aging settings. Managers view and edit all orders, assign/reassign work, update statuses, and access workload reports. Staff see and edit their assigned orders and can update their progress. All roles can create orders; Staff-created orders are automatically assigned to their creator. Permissions are enforced by the API and UI.
+
+The order directory supports search, user/status/priority/type/date filters, pagination, and sorting by serial number, creation date, priority, status, or age. Priorities are Low, Medium, High, and Urgent. Unfinished orders use configurable aging colors (default: green through day 1, yellow through day 3, orange through day 5, then red). Completed and cancelled orders have no overdue color.
 
 ## Architecture
 
@@ -24,19 +26,30 @@ The API is intentionally synchronous and simple: no WebSockets, message brokers,
 
 Prerequisites: Node 20+, npm 10+, PostgreSQL 15+.
 
-1. Copy `.env.example` to `apps/api/.env`, replace `[YOUR-PASSWORD]`, and set a strong `JWT_SECRET`. `DATABASE_URL` is the transaction-mode pooler for the API; `DIRECT_URL` is the session-mode pooler Prisma uses for migrations.
+1. Copy `.env.example` to `apps/api/.env`, fill in your database URLs, set `FRONTEND_URL=http://localhost:5173`, and set a strong `JWT_SECRET`. `DATABASE_URL` is the transaction-mode pooler for the API; `DIRECT_URL` is the session-mode pooler Prisma uses for migrations.
 2. Install dependencies: `npm install`.
 3. Generate Prisma client: `npm run db:generate`.
-4. Create the database schema: `npm run db:migrate -- --name init`.
+4. Create the database schema: `npm run db:migrate` (local development); use `npm run db:deploy` to apply checked-in migrations using `apps/api/.env`.
 5. Load demo data: `npm run db:seed`.
 6. Start both apps: `npm run dev`.
 
 Open `http://localhost:5173`. Seed users all use password `Password123!`:
 
 - `admin@oms.local` (Admin)
+- `manager@oms.local` (Manager)
 - `designer@oms.local` (Employee)
 - `maker@oms.local` (Employee)
 
 ## Checks
 
-`npm run build` type-checks and builds both apps. `npm test` runs the workflow-unit test. API endpoints are described in [API.md](API.md).
+`npm run build` type-checks and builds both apps. `npm test` runs workflow, aging, filtering, and sorting tests. API endpoints are described in [API.md](API.md).
+
+Existing priorities 0–2 migrate to 1–3, preserving the former Normal/High/Urgent meanings as Medium/High/Urgent. Existing multiple assignments are retained until reassignment replaces them with one selected user. Date filters use order creation dates in UTC, including the entire end date. Reports count current assignments; High Priority includes Urgent.
+
+For API integration checks, build first, apply migrations to a disposable PostgreSQL database, then run `OMS_TEST_DATABASE=1 node apps/api/scripts/verify-integration.cjs` with `DATABASE_URL` and `DIRECT_URL` pointing to that database. The script creates test users and modifies aging settings; use a dedicated test database only.
+
+If the UI reports that the database needs an update, run `npm run db:deploy` from the repository root. This applies the existing migrations without resetting the database.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for separate-provider deployment, resource limits, and performance review results.
+
+All authenticated roles can create orders. Managers and Admins can edit any order; Staff can edit only currently assigned orders. Staff-created orders are automatically assigned to their creator and start as New. Order deletion remains Admin-only.

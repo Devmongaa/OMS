@@ -1,0 +1,96 @@
+// Run only against a disposable database after applying migrations.
+const assert = require('node:assert/strict');
+const {PrismaClient} = require('@prisma/client');
+const bcrypt = require('bcryptjs');
+const prisma = new PrismaClient();
+async function main() {
+  assert.equal(process.env.OMS_TEST_DATABASE, '1', 'Set OMS_TEST_DATABASE=1 for a disposable database');
+  const app = require('../dist/app.js').default;
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  const password = 'Integration123!';
+  const suffix = Date.now();
+  const users = {};
+  async function request(path, token, method='GET', body, expected=200) {
+    const response = await fetch(base+path, {method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+    const data = response.status===204?null:await response.json();
+    assert.equal(response.status, expected, `${method} ${path}: ${JSON.stringify(data)}`);
+    return data;
+  }
+  try {
+    await prisma.agingSettings.upsert({where:{id:1},create:{id:1,greenDays:1,yellowDays:3,orangeDays:5},update:{greenDays:1,yellowDays:3,orangeDays:5}});
+    for (const [key,role] of Object.entries({admin:'ADMIN',manager:'MANAGER',staff:'EMPLOYEE',other:'EMPLOYEE'})) {
+      const user=await prisma.user.create({data:{name:key,email:`${key}-${suffix}@example.test`,role,passwordHash:await bcrypt.hash(password,4)}});
+      users[key]={...user,token:(await request('/auth/login',null,'POST',{email:user.email,password})).token};
+    }
+    const a=users.admin.token,m=users.manager.token,s=users.staff.token;
+    const body={customerName:'Integration',description:'Permission and workload checks',priority:3,orderType:`Test-${suffix}`,customerEmail:'clear@example.test',dueDate:'2026-12-01T00:00:00Z'};
+    await request('/orders',null,'POST',body,401);
+    for(const token of [s,m]){
+      const created=await request('/orders',token,'POST',body,201);
+      assert.equal((await request('/orders/'+created.id,token)).id,created.id);
+      if(token===s)assert.equal(created.assignments[0].user.id,users.staff.id);
+      assert.equal((await request('/orders/'+created.id,token,'PATCH',{customerName:'Edited'})).customerName,'Edited');
+      await request('/orders/'+created.id,token,'DELETE',undefined,403);
+      await request('/orders/'+created.id,a,'DELETE',undefined,204);
+    }
+    const order=await request('/orders',a,'POST',body,201);
+    assert.equal(order.status,'NEW');assert.ok(order.serialNumber>0);
+    await request('/orders/'+order.id,s,'GET',undefined,403);
+    assert.equal((await request('/orders/'+order.id,m,'PATCH',{customerName:'Manager edited'})).customerName,'Manager edited');
+    let updated=await request('/orders/'+order.id,a,'PATCH',{customerEmail:'',dueDate:null});
+    assert.equal(updated.customerEmail,null);assert.equal(updated.dueDate,null);
+    updated=await request('/orders/'+order.id+'/assignments',m,'POST',{userId:users.staff.id});
+    assert.equal(updated.status,'ASSIGNED');assert.equal(updated.assignments.length,1);assert.ok(updated.assignments[0].assignedAt);
+    assert.equal((await request('/orders',s)).total,1);
+    assert.equal((await request('/orders?assigneeId='+users.other.id,s)).total,0);
+    await request('/orders/'+order.id,s,'PATCH',{priority:3});
+    await request('/orders/'+order.id,users.other.token,'PATCH',{priority:0},403);
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'PENDING'});
+    await request('/reports/workload',s,'GET',undefined,403);
+    const report=await request('/reports/workload?assigneeId='+users.staff.id+'&orderType='+body.orderType,m);
+    assert.equal(report.items[0].total,1);assert.equal(report.items[0].pending,1);assert.equal(report.items[0].highPriority,1);
+    await prisma.order.update({where:{id:order.id},data:{createdAt:new Date(Date.now()-7*86400000)}});
+    assert.equal((await request('/orders/'+order.id,s)).ageColor,'red');
+    await request('/settings/aging',m,'PUT',{greenDays:7,yellowDays:8,orangeDays:9},403);
+    await request('/settings/aging',a,'PUT',{greenDays:7,yellowDays:8,orangeDays:9});
+    assert.equal((await request('/orders/'+order.id,s)).ageColor,'green');
+    await request('/settings/aging',a,'PUT',{greenDays:4,yellowDays:2,orangeDays:1},400);
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'COMPLETED'});
+    assert.equal((await request('/orders/'+order.id,s)).ageColor,null);
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'IN_PROGRESS'},409);
+    await request('/orders/'+order.id+'/assignments',m,'POST',{userId:users.other.id});
+    await request('/orders/'+order.id,s,'GET',undefined,403);
+    await request('/orders/'+order.id,s,'PATCH',{customerName:'Denied'},403);
+    await request('/admin/users',m,'GET',undefined,403);
+    await request('/users/'+users.admin.id,a,'PATCH',{role:'EMPLOYEE'},400);
+    await request('/users/'+users.manager.id,a,'PATCH',{role:'EMPLOYEE'});
+    await request('/reports/workload',m,'GET',undefined,403);
+    await request('/users/'+users.other.id,a,'PATCH',{active:false});
+    await request('/orders',users.other.token,'GET',undefined,401);
+    await prisma.order.update({where:{id:order.id},data:{status:'PENDING',createdAt:new Date(Date.now()-11*86400000)}});
+    const aged=await request('/reports/workload?assigneeId='+users.other.id+'&orderType='+body.orderType,a);
+    assert.equal(aged.items[0].overdue,1);
+    await prisma.order.update({where:{id:order.id},data:{status:'COMPLETED'}});
+    const dashboard=await request('/dashboard',a);
+    assert.ok(dashboard.total>=1);assert.ok(dashboard.recent.length<=6);assert.ok(dashboard.attention.length<=4);
+    assert.equal(dashboard.recent.some(o=>'description' in o || 'files' in o || 'shipment' in o),false);
+    const scoped=await request('/dashboard',s);assert.equal(scoped.total,0);
+    const page=await request('/reports/workload?limit=1&page=1',a);
+    assert.equal(page.items.length,1);assert.ok(page.total>=4);assert.ok(page.summary.total>=1);
+    const emptyPage=await request('/reports/workload?page=999',a);assert.equal(emptyPage.items.length,0);assert.equal(emptyPage.summary.total,page.summary.total);
+    const filtered=await request('/reports/workload?orderType='+body.orderType+'&status=COMPLETED&priority=3',a);
+    assert.equal(filtered.summary.total,1);assert.equal(filtered.summary.completed,1);
+    assert.equal((await request('/reports/workload?from=2099-01-01',a)).summary.total,0);
+    assert.equal((await request('/orders?limit=1000',a)).limit,100);
+    await request('/orders/'+order.id+'/files',a,'POST',{name:'invalid',url:'data:image/png;base64,abc'},400);
+    await request('/orders/'+order.id,a,'DELETE',undefined,204);
+    assert.equal((await request('/health')).status,'ok');
+    console.log('PASS: API permissions, role refresh, assignment, reports, aging, optional-field clearing and deletion');
+  } finally {
+    server.close();
+    await prisma.$disconnect();
+  }
+}
+main().then(()=>process.exit(0)).catch(error=>{console.error(error);process.exit(1)});

@@ -11,10 +11,16 @@ datasource db {
 
 enum Role {
   ADMIN
+  MANAGER
   EMPLOYEE
 }
 
 enum OrderStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  PENDING
+  CANCELLED
   ORDER_RECEIVED
   DESIGNING
   CUTTING_AND_PRINTING
@@ -46,6 +52,8 @@ model User {
 
 model Order {
   id String @id @default(cuid())
+  serialNumber Int @unique @default(autoincrement())
+  orderType String @default("General")
   orderNumber String @unique
   customerName String
   customerEmail String?
@@ -53,14 +61,17 @@ model Order {
   description String
   quantity Int @default(1)
   dueDate DateTime?
-  status OrderStatus @default(ORDER_RECEIVED)
-  priority Int @default(0)
+  status OrderStatus @default(NEW)
+  priority Int @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   assignments OrderAssignment[]
   statusHistory OrderStatusHistory[]
   files FileRecord[]
   shipment Shipment?
+  @@index([createdAt, serialNumber])
+  @@index([updatedAt, serialNumber])
+  @@index([status, createdAt])
 }
 
 model OrderAssignment {
@@ -70,6 +81,7 @@ model OrderAssignment {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([orderId, userId])
+  @@index([userId])
 }
 
 model OrderStatusHistory {
@@ -94,6 +106,7 @@ model FileRecord {
   kind FileKind @default(OTHER)
   createdAt DateTime @default(now())
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@index([orderId])
 }
 
 model Shipment {
@@ -107,4 +120,11 @@ model Shipment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model AgingSettings {
+  id Int @id @default(1)
+  greenDays Int @default(1)
+  yellowDays Int @default(3)
+  orangeDays Int @default(5)
 }

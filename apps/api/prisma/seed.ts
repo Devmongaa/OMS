@@ -4,6 +4,7 @@ const prisma = new PrismaClient();
 async function main() {
   const hash = await bcrypt.hash('Password123!', 10);
   const admin = await prisma.user.upsert({ where: { email: 'admin@oms.local' }, update: {}, create: { email: 'admin@oms.local', name: 'Avery Admin', passwordHash: hash, role: Role.ADMIN } });
+  await prisma.user.upsert({ where: { email: 'manager@oms.local' }, update: {}, create: { email: 'manager@oms.local', name: 'Morgan Manager', passwordHash: hash, role: Role.MANAGER } });
   const designer = await prisma.user.upsert({ where: { email: 'designer@oms.local' }, update: {}, create: { email: 'designer@oms.local', name: 'Dev Designer', passwordHash: hash } });
   const maker = await prisma.user.upsert({ where: { email: 'maker@oms.local' }, update: {}, create: { email: 'maker@oms.local', name: 'Mina Maker', passwordHash: hash } });
   const existing = await prisma.order.count(); if (existing) return;

@@ -9,6 +9,7 @@
     "test": "npm run test --workspaces",
     "db:generate": "npm run prisma:generate -w @oms/api",
     "db:migrate": "cd apps/api && npx prisma migrate dev",
+    "db:deploy": "npm run prisma:deploy -w @oms/api",
     "db:seed": "npm run prisma:seed -w @oms/api"
   },
   "devDependencies": { "concurrently": "^9.1.2" }
