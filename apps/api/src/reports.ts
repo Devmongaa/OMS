@@ -14,7 +14,7 @@ export async function workload(prisma:PrismaClient, query:Record<string,unknown>
  if(dates.gte)conditions.push(Prisma.sql`o."createdAt" >= ${dates.gte}`);
  if(dates.lt)conditions.push(Prisma.sql`o."createdAt" < ${dates.lt}`);
  if(f.q){const pattern=`%${f.q}%`;conditions.push(Prisma.sql`(o."orderNumber" ILIKE ${pattern} OR o."customerName" ILIKE ${pattern} OR o.description ILIKE ${pattern})`);}
- for(const id of [user.role==='EMPLOYEE'?user.id:undefined,f.assigneeId])if(id)conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM "OrderAssignment" scope WHERE scope."orderId"=o.id AND scope."userId"=${id})`);
+ for(const id of [f.assigneeId])if(id)conditions.push(Prisma.sql`EXISTS (SELECT 1 FROM "OrderAssignment" scope WHERE scope."orderId"=o.id AND scope."userId"=${id})`);
  const number=(v:unknown,d:number)=>Number.isSafeInteger(Number(v))&&Number(v)>0?Number(v):d;
  const page=number(query.page,1),limit=Math.min(number(query.limit,20),100);
  const result=await prisma.$queryRaw<{items:Workload[];total:number;summary:{total:number;pending:number;completed:number}}[]>(Prisma.sql`

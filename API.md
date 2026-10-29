@@ -6,16 +6,16 @@ Base URL: `/api`. Send `Authorization: Bearer <token>` on protected endpoints. A
 | --- | --- | --- | --- |
 | POST | `/auth/login` | Public | Returns JWT and current user |
 | GET | `/auth/me` | Authenticated | Current user |
-| GET | `/orders` | Authenticated | Paginated orders; Staff are scoped to their assignments |
+| GET | `/orders` | Authenticated | Paginated shared orders for every role; optional assignee filter |
 | POST | `/orders` | Authenticated | Create a New order; Staff creators are automatically assigned |
-| GET | `/orders/:id` | Admin/Manager or assigned Staff | Details, history, assignment time and age |
+| GET | `/orders/:id` | Authenticated | Details, history, assignment time and age |
 | PATCH | `/orders/:id` | Admin/Manager or assigned Staff | Edit order |
 | DELETE | `/orders/:id` | Admin | Delete order |
 | POST | `/orders/:id/status` | Admin/Manager or assigned Staff | Update status and append history |
 | POST | `/orders/:id/assignments` | Admin/Manager | `{ "userId": "..." }` replaces current assignments; New becomes Assigned |
 | POST | `/orders/:id/files` | Admin/Manager or assigned Staff | Record file metadata/URL |
 | POST | `/orders/:id/shipments` | Admin/Manager or assigned Staff | Update shipment |
-| GET | `/dashboard` | Authenticated | Status counts and recent orders, scoped for Staff |
+| GET | `/dashboard` | Authenticated | Workspace-wide status counts, recent orders, and assignment workload |
 | GET | `/reports/workload` | Admin/Manager | Current assignment totals and status/priority counts per user |
 | GET | `/users` | Admin/Manager | Active assignment candidates |
 | GET | `/admin/users` | Admin | All users including inactive accounts |
@@ -42,3 +42,5 @@ Errors use `{ "error": { "message": "Human-readable explanation" } }` with 400 v
 - Error responses retain `{ error: { message } }`. Production clients receive no SQL text or stack trace. Responses use `Cache-Control: no-store`.
 
 Order permissions: POST /api/orders accepts every authenticated role. Staff-created orders are assigned to the creator. PATCH /api/orders/:id accepts Admins/Managers and currently assigned Staff; assignment scope is rechecked in the update query. DELETE remains Admin-only.
+
+All signed-in active users can read every order, including details and history, before and after reassignment. Assignment limits Staff write access only. No database migration is required for this visibility change.

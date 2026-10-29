@@ -11,10 +11,11 @@ test('aging boundaries and terminal exclusions',()=>{
  }
  assert.equal(aging({createdAt:new Date(+now-2*86400000),status:'NEW'},{greenDays:2,yellowDays:4,orangeDays:8},now).ageColor,'green');
 });
-test('staff scope cannot be overridden by assignee filters',()=>{
- const filter=orderFilter({assigneeId:'other'},{id:'staff',role:'EMPLOYEE'});
- assert.deepEqual(filter.AND,[{assignments:{some:{userId:'staff'}}},{assignments:{some:{userId:'other'}}}]);
- assert.deepEqual(orderFilter({},{id:'manager',role:'MANAGER'}).AND,[]);
+test('all roles see all orders unless explicitly filtering an assignee',()=>{
+ for (const role of ['ADMIN','MANAGER','EMPLOYEE'] as const) {
+  assert.deepEqual(orderFilter({},{id:'viewer',role}).AND,[]);
+  assert.deepEqual(orderFilter({assigneeId:'other'},{id:'viewer',role}).AND,[{assignments:{some:{userId:'other'}}}]);
+ }
 });
 test('filters retain low priority and inclusive end date, rejecting invalid values',()=>{
  const f=orderFilter({priority:'0',from:'2026-10-01',to:'2026-10-05'},{id:'a',role:'ADMIN'});

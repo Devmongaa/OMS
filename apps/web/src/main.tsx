@@ -4,6 +4,7 @@ import{BrowserRouter,Link,Navigate,Route,Routes,useNavigate,useParams}from'react
 import{api}from'./api';
 import{FLOW,Order,STATUS_LABEL,STATUSES,PRIORITIES,Status,User}from'./types';
 import'./styles.css';
+import './responsive.css';
 const OrderDirectory=lazy(()=>import('./operations').then(m=>({default:m.OrderDirectory})));
 const Administration=lazy(()=>import('./operations').then(m=>({default:m.Administration})));
 import {Layout} from './shell';
@@ -13,7 +14,7 @@ import {Loading,StatusBadge as Badge,PageHead as Head,PriorityBadge,AgeBadge,Ico
 const fmt=(v?:string)=>v?new Date(v).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'—';
 
 function Mark(){return <span className="brand-symbol"><Icon name="box" size={22}/></span>}
-function Login({onLogin}:{onLogin:(u:User)=>void}){const[email,setEmail]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[sending,setSending]=useState(false);
+function Login({onLogin}:{onLogin:(u:User)=>void}){const[email,setEmail]=useState(''),[password,setPassword]=useState(''),[showPassword,setShowPassword]=useState(false),[error,setError]=useState(''),[sending,setSending]=useState(false);
 const nav=useNavigate();
 async function submit(e:FormEvent){e.preventDefault();
 setSending(true);
@@ -40,8 +41,7 @@ nav('/')}catch{setError('Unable to sign in. Check your credentials and try again
 <p>Enter your details to continue managing orders.</p>
 </div>{error&&<div className="error" role="alert">{error}</div>}<label>Email address<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/>
 </label>
-<label>Password<input required type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/>
-</label>
+<div className="login-password"><label htmlFor="login-password">Password</label><div className="password-input-wrap"><input id="login-password" required type={showPassword?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/><button type="button" className="password-toggle" aria-label={showPassword?'Hide password':'Show password'} aria-controls="login-password" onClick={()=>setShowPassword(visible=>!visible)}>{showPassword?'Hide':'Show'}</button></div></div>
 <button disabled={sending}>{sending?'Signing in…':'Sign in to Makkar and Brother OMS'} →</button>
 <small className="secure"><Icon name="check" size={14}/> Your team’s order management workspace</small>
 </form>
@@ -54,9 +54,8 @@ setCreating(true);
 setError('');
 const f=new FormData(e.currentTarget);
 try{const{data}=await api.post('/orders',{customerName:f.get('customerName'),customerEmail:f.get('customerEmail')||undefined,description:f.get('description'),quantity:Number(f.get('quantity')),orderType:f.get('orderType'),priority:Number(f.get('priority'))});
-nav('/orders/'+data.id)}catch{setError('Please complete the required fields.')}finally{setCreating(false)}}return <>
-<Head eyebrow="NEW ORDER" title="Create an order" description="Capture the essentials now;
- your team can progress it from here."/>
+nav('/orders/'+data.id)}catch{setError('Unable to create the order. Check the required fields and try again.')}finally{setCreating(false)}}return <>
+<Head eyebrow="NEW ORDER" title="Create an order" description="Add customer information and production requirements."/>
 <div className="create-layout"><section className="form-card">
 <form onSubmit={submit}>
 <div>
@@ -86,14 +85,14 @@ nav('/orders/'+data.id)}catch{setError('Please complete the required fields.')}f
 <button disabled={creating}>{creating?<><span className="button-spinner"/>Creating order…</>:'Create order'}</button>
 </div>
 </form>
-</section><aside className="form-aside"><div className="card pad"><span className="aside-icon"><Icon name="box" size={24}/></span><h3>A good brief goes a long way</h3><p>Include dimensions, materials, artwork, and delivery requirements in the production brief.</p><hr/><div className="aside-step"><Icon name="check"/><span>A unique order ID is generated automatically.</span></div><div className="aside-step"><Icon name="users"/><span>Assign a team member from order details after creation.</span></div><div className="aside-step"><Icon name="clock"/><span>New orders start with the New status.</span></div></div></aside></div>
+</section><aside className="form-aside"><div className="card pad"><span className="aside-icon"><Icon name="box" size={24}/></span><h3>Order checklist</h3><p>Include dimensions, materials, artwork, and delivery requirements in the production brief.</p><hr/><div className="aside-step"><Icon name="check"/><span>A unique order ID is generated automatically.</span></div><div className="aside-step"><Icon name="users"/><span>Assign a team member from order details after creation.</span></div><div className="aside-step"><Icon name="clock"/><span>New orders start with the New status.</span></div></div></aside></div>
 </>}
 function Detail({user}:{user:User}){const{id=''}=useParams();
-const[confirmDelete,setConfirmDelete]=useState(false),[deleting,setDeleting]=useState(false),[success,setSuccess]=useState('');
-const[order,setOrder]=useState<Order|null>(null),[users,setUsers]=useState<User[]>([]),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState('');
+const[confirmDelete,setConfirmDelete]=useState(false),[deleting,setDeleting]=useState(false),[assigning,setAssigning]=useState(false),[success,setSuccess]=useState('');
+const[order,setOrder]=useState<Order|null>(null),[users,setUsers]=useState<User[]>([]),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[editing,setEditing]=useState(false),[error,setError]=useState('');
 const load=()=>api.get('/orders/'+id).then(r=>setOrder(r.data));
 useEffect(()=>{load().catch(()=>setError('Unable to load this order or access denied.'));
-if(user.role!=='EMPLOYEE')api.get('/users').then(r=>setUsers(r.data)).catch(()=>setError('Unable to load users.')).catch(()=>setError('Unable to load assignment candidates.'))},[id]);
+if(user.role!=='EMPLOYEE')api.get('/users').then(r=>setUsers(r.data)).catch(()=>setError('Unable to load assignment candidates.'))},[id]);
 if(!order&&error)return <ErrorState message={error} retry={()=>load().catch(()=>setError('Unable to load this order.'))}/>;
 if(!order)return <Loading label="Loading order…"/>;
 const flow:Status[]=FLOW.includes(order.status)?FLOW:['NEW','ASSIGNED','IN_PROGRESS','COMPLETED'];
@@ -105,11 +104,11 @@ await load();setSuccess('Order status updated.')}catch{setError('Unable to updat
 <div className="detail-head">
 <div>
 <Link to="/orders">← All orders</Link>
-<span className="eyebrow">ORDER {order.orderNumber}</span>
+<span className="eyebrow">#{String(order.serialNumber).padStart(3,'0')} · {order.orderNumber}</span>
 <h1>{order.customerName}</h1>
 <p>{order.quantity} unit{order.quantity!==1?'s':''} · Created {fmt(order.createdAt)}</p>
 </div>
-<div className="detail-actions"><PriorityBadge priority={order.priority}/><Badge status={order.status}/>{user.role==='ADMIN'&&<button className="secondary danger-text" onClick={()=>setConfirmDelete(true)}>Delete order</button>}</div>
+<div className="detail-actions"><PriorityBadge priority={order.priority}/><Badge status={order.status}/><AgeBadge order={order}/>{user.role==='ADMIN'&&<button className="secondary danger-text" onClick={()=>setConfirmDelete(true)}>Delete order</button>}</div>
 <ConfirmDialog open={confirmDelete} title="Delete this order?" busy={deleting} onCancel={()=>setConfirmDelete(false)} onConfirm={async()=>{setDeleting(true);try{await api.delete('/orders/'+id);window.location.href='/orders'}catch{setError('Unable to delete the order. Please try again.');setConfirmDelete(false)}finally{setDeleting(false)}}}>This permanently deletes {order.orderNumber} and its history. This action cannot be undone.</ConfirmDialog></div>
 {success&&<div className="notice" role="status"><Icon name="check"/>{success}</div>}{error&&<ErrorState message={error}/>}<div className="detail">
 <section className="card pad">
@@ -129,20 +128,20 @@ await load();setSuccess('Order status updated.')}catch{setError('Unable to updat
 <div>
 <span className="eyebrow">ASSIGNED TEAM</span>
 <p>{order.assignments.map(a=>`${a.user.name} (assigned ${new Date(a.assignedAt).toLocaleString()})`).join(', ')||'Nobody has been assigned yet.'}</p>
-</div>{user.role!=='EMPLOYEE'&&<select aria-label="Assign or reassign order" defaultValue="" onChange={e=>e.target.value&&api.post('/orders/'+id+'/assignments',{userId:e.target.value}).then(load).catch(()=>setError('Assignment failed. Please try again.'))}>
-<option value="" disabled>Assign team member…</option>{users.filter(u=>!order.assignments.some(a=>a.user.id===u.id)).map(u=>
+</div>{user.role!=='EMPLOYEE'&&<select aria-label="Assign or reassign order" value="" disabled={assigning} onChange={async e=>{const userId=e.target.value;if(!userId)return;setAssigning(true);setError('');setSuccess('');try{await api.post('/orders/'+id+'/assignments',{userId});await load();setSuccess('Assignment updated. This order remains visible to everyone.')}catch{setError('Assignment failed. Please try again.')}finally{setAssigning(false)}}}>
+<option value="" disabled>{assigning?'Updating assignment…':order.assignments.length?'Reassign order…':'Assign team member…'}</option>{users.filter(u=>!order.assignments.some(a=>a.user.id===u.id)).map(u=>
 <option key={u.id} value={u.id}>{u.name}</option>)}</select>}</div>
 </section>
 <section className="card pad">
 <span className="eyebrow">WORKFLOW</span>
-<h2>Order progress</h2>
-<div className="steps">{flow.map((s,i)=>
+<h2>Order progress</h2>{user.role==='EMPLOYEE'&&!assigned&&<div className="view-only"><Icon name="users" size={18}/><div><strong>You’re viewing a shared order</strong><p>You can follow its progress here. Assigned staff, Managers, and Admins can make updates. Ask a Manager or Admin to change the assignment.</p></div></div>}
+<div className="workflow-current"><span>Current status</span><Badge status={order.status}/></div><div className="steps">{flow.map((s,i)=>
 <div className={flow.indexOf(s)<=flow.indexOf(order.status)?'done':''} key={s}>
 <b>{flow.indexOf(s)<flow.indexOf(order.status)?'✓':i+1}</b>{STATUS_LABEL[s]}</div>)}</div>{(user.role!=='EMPLOYEE'||assigned)&&<div className="advance">
 <label>Progress note<textarea value={note} onChange={e=>setNote(e.target.value)}/></label>
 <label>Update status<select value="" disabled={saving} onChange={e=>e.target.value&&move(e.target.value as Status)}><option value="">Select status…</option>{STATUSES.filter(s=>s!==order.status&&(user.role!=='EMPLOYEE'||(!['COMPLETED','CANCELLED'].includes(order.status)&&(['IN_PROGRESS','PENDING','COMPLETED'].includes(s)||s===next)))).map(s=><option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></label>
 </div>}
-{(user.role!=='EMPLOYEE'||assigned)&&<details className="edit-panel"><summary>Edit order <Icon name="settings" size={16}/></summary><form onSubmit={async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{await api.patch('/orders/'+id,{customerName:f.get('customerName'),description:f.get('description'),orderType:f.get('orderType'),priority:Number(f.get('priority'))});await load();setSuccess('Order updated successfully.')}catch{setError('Unable to save order')}}}><p className="muted">Update the order’s customer and production details.</p><label>Customer<input name="customerName" defaultValue={order.customerName} required/></label><label>Description<textarea name="description" defaultValue={order.description} required/></label><label>Type<input name="orderType" defaultValue={order.orderType} required/></label><label>Priority<select name="priority" defaultValue={order.priority}>{PRIORITIES.map((p,i)=><option key={p} value={i}>{p}</option>)}</select></label><button>Save changes</button></form></details>}
+{(user.role!=='EMPLOYEE'||assigned)&&<details className="edit-panel"><summary>Edit order <Icon name="settings" size={16}/></summary><form onSubmit={async e=>{e.preventDefault();const f=new FormData(e.currentTarget);setEditing(true);setError('');setSuccess('');try{await api.patch('/orders/'+id,{customerName:f.get('customerName'),description:f.get('description'),orderType:f.get('orderType'),priority:Number(f.get('priority'))});await load();setSuccess('Order updated successfully.')}catch{setError('Unable to save order')}finally{setEditing(false)}}}><p className="muted">Update the order’s customer and production details.</p><label>Customer<input name="customerName" defaultValue={order.customerName} required/></label><label>Description<textarea name="description" defaultValue={order.description} required/></label><label>Type<input name="orderType" defaultValue={order.orderType} required/></label><label>Priority<select name="priority" defaultValue={order.priority}>{PRIORITIES.map((p,i)=><option key={p} value={i}>{p}</option>)}</select></label><button disabled={editing}>{editing?'Saving…':'Save changes'}</button></form></details>}
 </section>
 </div>
 <section className="card history">

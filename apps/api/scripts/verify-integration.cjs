@@ -22,22 +22,36 @@ async function main() {
     await prisma.agingSettings.upsert({where:{id:1},create:{id:1,greenDays:1,yellowDays:3,orangeDays:5},update:{greenDays:1,yellowDays:3,orangeDays:5}});
     for (const [key,role] of Object.entries({admin:'ADMIN',manager:'MANAGER',staff:'EMPLOYEE',other:'EMPLOYEE'})) {
       const user=await prisma.user.create({data:{name:key,email:`${key}-${suffix}@example.test`,role,passwordHash:await bcrypt.hash(password,4)}});
-      users[key]={...user,token:(await request('/auth/login',null,'POST',{email:user.email,password})).token};
+      users[key]={...user,token:(await request('/auth/login',null,'POST',{email:' '+user.email.toUpperCase()+' ',password})).token};
     }
     const a=users.admin.token,m=users.manager.token,s=users.staff.token;
+    const account=await request('/users',a,'POST',{name:'Email normalization',email:` Mixed-${suffix}@Example.Test `,password,role:'EMPLOYEE'},201);
+    assert.equal(account.email,`mixed-${suffix}@example.test`);
+    await request('/users',a,'POST',{name:'Duplicate',email:`MIXED-${suffix}@EXAMPLE.TEST`,password,role:'EMPLOYEE'},409);
+    const renamed=await request('/users/'+account.id,a,'PATCH',{email:` RENAMED-${suffix}@Example.Test `});
+    assert.equal(renamed.email,`renamed-${suffix}@example.test`);
+    await request('/auth/login',null,'POST',{email:`RENAMED-${suffix}@EXAMPLE.TEST`,password});
+
     const body={customerName:'Integration',description:'Permission and workload checks',priority:3,orderType:`Test-${suffix}`,customerEmail:'clear@example.test',dueDate:'2026-12-01T00:00:00Z'};
     await request('/orders',null,'POST',body,401);
     for(const token of [s,m]){
       const created=await request('/orders',token,'POST',body,201);
       assert.equal((await request('/orders/'+created.id,token)).id,created.id);
       if(token===s)assert.equal(created.assignments[0].user.id,users.staff.id);
+      assert.equal((await request('/orders/'+created.id,users.other.token)).id,created.id);
       assert.equal((await request('/orders/'+created.id,token,'PATCH',{customerName:'Edited'})).customerName,'Edited');
       await request('/orders/'+created.id,token,'DELETE',undefined,403);
       await request('/orders/'+created.id,a,'DELETE',undefined,204);
     }
     const order=await request('/orders',a,'POST',body,201);
     assert.equal(order.status,'NEW');assert.ok(order.serialNumber>0);
-    await request('/orders/'+order.id,s,'GET',undefined,403);
+    assert.equal((await request('/orders?orderType='+body.orderType,s)).total,1);
+    await request('/orders/'+order.id,s,'PATCH',{customerName:'Denied'},403);
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'PENDING'},403);
+    await request('/orders/'+order.id+'/assignments',s,'POST',{userId:users.staff.id},403);
+    await request('/orders/'+order.id+'/files',s,'POST',{name:'Denied',url:'https://example.test/file'},403);
+    await request('/orders/'+order.id+'/shipments',s,'POST',{carrier:'Denied'},403);
+    assert.equal((await request('/orders/'+order.id,s)).id,order.id);
     assert.equal((await request('/orders/'+order.id,m,'PATCH',{customerName:'Manager edited'})).customerName,'Manager edited');
     let updated=await request('/orders/'+order.id,a,'PATCH',{customerEmail:'',dueDate:null});
     assert.equal(updated.customerEmail,null);assert.equal(updated.dueDate,null);
@@ -61,7 +75,7 @@ async function main() {
     assert.equal((await request('/orders/'+order.id,s)).ageColor,null);
     await request('/orders/'+order.id+'/status',s,'POST',{status:'IN_PROGRESS'},409);
     await request('/orders/'+order.id+'/assignments',m,'POST',{userId:users.other.id});
-    await request('/orders/'+order.id,s,'GET',undefined,403);
+    assert.equal((await request('/orders/'+order.id,s)).id,order.id);
     await request('/orders/'+order.id,s,'PATCH',{customerName:'Denied'},403);
     await request('/admin/users',m,'GET',undefined,403);
     await request('/users/'+users.admin.id,a,'PATCH',{role:'EMPLOYEE'},400);
@@ -76,7 +90,7 @@ async function main() {
     const dashboard=await request('/dashboard',a);
     assert.ok(dashboard.total>=1);assert.ok(dashboard.recent.length<=6);assert.ok(dashboard.attention.length<=4);
     assert.equal(dashboard.recent.some(o=>'description' in o || 'files' in o || 'shipment' in o),false);
-    const scoped=await request('/dashboard',s);assert.equal(scoped.total,0);
+    const shared=await request('/dashboard',s);assert.equal(shared.total,dashboard.total);assert.deepEqual(shared.byStatus,dashboard.byStatus);assert.deepEqual(shared.workload,dashboard.workload);
     const page=await request('/reports/workload?limit=1&page=1',a);
     assert.equal(page.items.length,1);assert.ok(page.total>=4);assert.ok(page.summary.total>=1);
     const emptyPage=await request('/reports/workload?page=999',a);assert.equal(emptyPage.items.length,0);assert.equal(emptyPage.summary.total,page.summary.total);
@@ -87,7 +101,7 @@ async function main() {
     await request('/orders/'+order.id+'/files',a,'POST',{name:'invalid',url:'data:image/png;base64,abc'},400);
     await request('/orders/'+order.id,a,'DELETE',undefined,204);
     assert.equal((await request('/health')).status,'ok');
-    console.log('PASS: API permissions, role refresh, assignment, reports, aging, optional-field clearing and deletion');
+    console.log('PASS: shared order visibility, API permissions, role refresh, assignment, reports, aging, optional-field clearing and deletion');
   } finally {
     server.close();
     await prisma.$disconnect();

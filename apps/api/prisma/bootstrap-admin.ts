@@ -1,6 +1,7 @@
 import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { emailInput } from '../src/email.js';
 
 const prisma = new PrismaClient();
 
@@ -12,7 +13,7 @@ async function main() {
   }
 
   const input = z.object({
-    email: z.string().email(),
+    email: emailInput,
     password: z.string().min(12),
     name: z.string().trim().min(1),
   }).parse({
@@ -23,7 +24,7 @@ async function main() {
 
   await prisma.user.create({
     data: {
-      email: input.email.toLowerCase(),
+      email: input.email,
       name: input.name,
       passwordHash: await bcrypt.hash(input.password, 12),
       role: Role.ADMIN,

@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient, Prisma, Role, OrderStatus } from '@prisma/client';
 
 import { z } from 'zod';
+import { emailInput } from './email.js';
 
 import { configuration } from './config.js';
 const config=configuration(process.env);
@@ -83,7 +84,7 @@ async function allowedOnOrder(req: Request, res: Response) {
 app.get(['/health', '/api/health'], (_, res) => res.json({ status: 'ok' }));
 
 app.post('/api/auth/login', asyncRoute(async (req, res) => {
-  const data = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
+  const data = z.object({ email: emailInput, password: z.string().min(1) }).parse(req.body);
 
   const user = await prisma.user.findUnique({ where: { email: data.email } });
 
@@ -111,7 +112,7 @@ app.get('/api/orders', auth, asyncRoute(async (req, res) => {
 
 }));
 
-const orderInput = z.object({ customerName: z.string().min(1), customerEmail: z.string().email().optional().or(z.literal('')), customerPhone: z.string().optional(), description: z.string().min(1), quantity: z.number().int().positive().default(1), dueDate: z.string().datetime().optional().nullable(), orderType: z.string().trim().min(1).default("General"), priority: z.number().int().min(0).max(3).default(1) });
+const orderInput = z.object({ customerName: z.string().min(1), customerEmail: emailInput.optional().or(z.literal('')), customerPhone: z.string().optional(), description: z.string().min(1), quantity: z.number().int().positive().default(1), dueDate: z.string().datetime().optional().nullable(), orderType: z.string().trim().min(1).default("General"), priority: z.number().int().min(0).max(3).default(1) });
 
 app.post('/api/orders', auth, asyncRoute(async (req, res) => {
   const data = orderInput.parse(req.body);
@@ -123,7 +124,7 @@ app.post('/api/orders', auth, asyncRoute(async (req, res) => {
 
 }));
 
-app.get('/api/orders/:id', auth, asyncRoute(async (req, res) => { if (!(await allowedOnOrder(req, res))) return; const order = await prisma.order.findUnique({ where: { id: param(req, 'id') }, include: { ...orderInclude, statusHistory: { include: { changedBy: { select: { name: true } } }, orderBy: { createdAt: 'desc' } } } });
+app.get('/api/orders/:id', auth, asyncRoute(async (req, res) => { const order = await prisma.order.findUnique({ where: { id: param(req, 'id') }, include: { ...orderInclude, statusHistory: { include: { changedBy: { select: { name: true } } }, orderBy: { createdAt: 'desc' } } } });
  return order ? res.json({...order, ...aging(order, await prisma.agingSettings.findUnique({where:{id:1}}))}) : fail(res, 404, 'Order not found');
  }));
 
@@ -199,7 +200,7 @@ app.get('/api/reports/workload', auth, manager, asyncRoute(async (req,res)=>{
 const settingsInput=z.object({greenDays:z.number().int().min(0),yellowDays:z.number().int().min(1),orangeDays:z.number().int().min(2)}).refine(x=>x.greenDays<x.yellowDays&&x.yellowDays<x.orangeDays,'Thresholds must increase');
 app.get('/api/settings/aging',auth,asyncRoute(async(_,res)=>res.json(await prisma.agingSettings.findUnique({where:{id:1}})||{greenDays:1,yellowDays:3,orangeDays:5})));
 app.put('/api/settings/aging',auth,admin,asyncRoute(async(req,res)=>{const data=settingsInput.parse(req.body);res.json(await prisma.agingSettings.upsert({where:{id:1},create:{id:1,...data},update:data}));}));
-const userInput=z.object({name:z.string().trim().min(1),email:z.string().email(),role:z.nativeEnum(Role),password:z.string().min(10),active:z.boolean().default(true)});
+const userInput=z.object({name:z.string().trim().min(1),email:emailInput,role:z.nativeEnum(Role),password:z.string().min(10),active:z.boolean().default(true)});
 app.get('/api/admin/users',auth,admin,asyncRoute(async(_,res)=>res.json(await prisma.user.findMany({select:{id:true,name:true,email:true,role:true,active:true},orderBy:{name:'asc'}}))));
 app.post('/api/users',auth,admin,asyncRoute(async(req,res)=>{const {password,...data}=userInput.parse(req.body);const user=await prisma.user.create({data:{...data,passwordHash:await bcrypt.hash(password,10)},select:{id:true,name:true,email:true,role:true,active:true}});res.status(201).json(user);}));
 app.patch('/api/users/:id',auth,admin,asyncRoute(async(req,res)=>{

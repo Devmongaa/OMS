@@ -5,13 +5,12 @@ export const filters = z.object({
  priority:z.coerce.number().int().min(0).max(3).optional(), orderType:z.string().optional(),
  from:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
 });
-export function orderFilter(query:object,user:{id:string;role:Role}):Prisma.OrderWhereInput {
+export function orderFilter(query:object,_user:{id:string;role:Role}):Prisma.OrderWhereInput {
  const f=filters.parse(Object.fromEntries(Object.entries(query).filter(([,v])=>v!=='')));
  const from=f.from?new Date(f.from):undefined, to=f.to?new Date(f.to):undefined;
  if ((from && !Number.isFinite(+from)) || (to && !Number.isFinite(+to)) || (from && to && from>to)) throw new z.ZodError([{code:'custom',path:['from'],message:'Invalid date range'}]);
  if(to)to.setUTCDate(to.getUTCDate()+1);
  return {status:f.status,priority:f.priority,orderType:f.orderType,createdAt:{gte:from,lt:to},AND:[
- ...(user.role==='EMPLOYEE'?[{assignments:{some:{userId:user.id}}}]:[]),
  ...(f.assigneeId?[{assignments:{some:{userId:f.assigneeId}}}]:[])
  ],...(f.q?{OR:['orderNumber','customerName','description'].map(key=>({[key]:{contains:f.q,mode:'insensitive'}}))}:{})};
 }
