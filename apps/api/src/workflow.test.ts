@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { OrderStatus } from '@prisma/client';
 import { canTransition } from './workflow.js';
 
-test('employees can advance exactly one stage', () => {
-  assert.equal(canTransition('ORDER_RECEIVED', 'DESIGNING', false), true);
-  assert.equal(canTransition('ORDER_RECEIVED', 'MAKING', false), false);
-  assert.equal(canTransition('MAKING', 'DESIGNING', false), false);
+test('all statuses are available including reopening; no-op changes are rejected', () => {
+  for (const from of Object.values(OrderStatus)) {
+    for (const to of Object.values(OrderStatus)) {
+      assert.equal(canTransition(from, to), from !== to, from + ' -> ' + to);
+    }
+  }
 });

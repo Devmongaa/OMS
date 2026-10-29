@@ -47,16 +47,32 @@ async function main() {
     assert.equal(order.status,'NEW');assert.ok(order.serialNumber>0);
     assert.equal((await request('/orders?orderType='+body.orderType,s)).total,1);
     await request('/orders/'+order.id,s,'PATCH',{customerName:'Denied'},403);
-    await request('/orders/'+order.id+'/status',s,'POST',{status:'PENDING'},403);
-    await request('/orders/'+order.id+'/assignments',s,'POST',{userId:users.staff.id},403);
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'PENDING'});
+    await request('/orders/'+order.id+'/assignments',s,'POST',{userId:users.staff.id},409);
     await request('/orders/'+order.id+'/files',s,'POST',{name:'Denied',url:'https://example.test/file'},403);
     await request('/orders/'+order.id+'/shipments',s,'POST',{carrier:'Denied'},403);
     assert.equal((await request('/orders/'+order.id,s)).id,order.id);
     assert.equal((await request('/orders/'+order.id,m,'PATCH',{customerName:'Manager edited'})).customerName,'Manager edited');
     let updated=await request('/orders/'+order.id,a,'PATCH',{customerEmail:'',dueDate:null});
     assert.equal(updated.customerEmail,null);assert.equal(updated.dueDate,null);
-    updated=await request('/orders/'+order.id+'/assignments',m,'POST',{userId:users.staff.id});
-    assert.equal(updated.status,'ASSIGNED');assert.equal(updated.assignments.length,1);assert.ok(updated.assignments[0].assignedAt);
+    for (const token of [a,m,s,users.other.token]) {
+      const candidates=await request('/users',token);
+      assert.ok(candidates.some(u=>u.id===users.staff.id));
+      assert.ok(candidates.every(u=>!('passwordHash' in u)));
+      await request('/orders/'+order.id+'/status',token,'POST',{status:'MAKING'});
+      const assigned=await request('/orders/'+order.id+'/assignments',token,'POST',{userId:users.other.id});
+      assert.equal(assigned.assignments.length,1);
+      assert.equal(assigned.assignments[0].user.id,users.other.id);
+      await request('/orders/'+order.id+'/status',token,'POST',{status:'PENDING'});
+      await request('/orders/'+order.id+'/assignments',token,'POST',{userId:users.staff.id},409);
+    }
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'MAKING'});
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'MAKING'},409);
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'INVALID'},400);
+    await request('/orders/'+order.id+'/status',null,'POST',{status:'PENDING'},401);
+    await request('/orders/'+order.id+'/assignments',null,'POST',{userId:users.staff.id},401);
+    updated=await request('/orders/'+order.id+'/assignments',s,'POST',{userId:users.staff.id});
+    assert.equal(updated.status,'MAKING');assert.equal(updated.assignments.length,1);assert.ok(updated.assignments[0].assignedAt);
     assert.equal((await request('/orders',s)).total,1);
     assert.equal((await request('/orders?assigneeId='+users.other.id,s)).total,0);
     await request('/orders/'+order.id,s,'PATCH',{priority:3});
@@ -73,8 +89,9 @@ async function main() {
     await request('/settings/aging',a,'PUT',{greenDays:4,yellowDays:2,orangeDays:1},400);
     await request('/orders/'+order.id+'/status',s,'POST',{status:'COMPLETED'});
     assert.equal((await request('/orders/'+order.id,s)).ageColor,null);
-    await request('/orders/'+order.id+'/status',s,'POST',{status:'IN_PROGRESS'},409);
-    await request('/orders/'+order.id+'/assignments',m,'POST',{userId:users.other.id});
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'IN_PROGRESS'});
+    await request('/orders/'+order.id+'/status',users.other.token,'POST',{status:'MAKING'});
+    await request('/orders/'+order.id+'/assignments',users.other.token,'POST',{userId:users.other.id});
     assert.equal((await request('/orders/'+order.id,s)).id,order.id);
     await request('/orders/'+order.id,s,'PATCH',{customerName:'Denied'},403);
     await request('/admin/users',m,'GET',undefined,403);
@@ -83,6 +100,8 @@ async function main() {
     await request('/reports/workload',m,'GET',undefined,403);
     await request('/users/'+users.other.id,a,'PATCH',{active:false});
     await request('/orders',users.other.token,'GET',undefined,401);
+    await request('/orders/'+order.id+'/status',users.other.token,'POST',{status:'PENDING'},401);
+    await request('/orders/'+order.id+'/assignments',users.other.token,'POST',{userId:users.staff.id},401);
     await prisma.order.update({where:{id:order.id},data:{status:'PENDING',createdAt:new Date(Date.now()-11*86400000)}});
     const aged=await request('/reports/workload?assigneeId='+users.other.id+'&orderType='+body.orderType,a);
     assert.equal(aged.items[0].overdue,1);

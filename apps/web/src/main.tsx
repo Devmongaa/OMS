@@ -85,18 +85,17 @@ nav('/orders/'+data.id)}catch{setError('Unable to create the order. Check the re
 <button disabled={creating}>{creating?<><span className="button-spinner"/>Creating order…</>:'Create order'}</button>
 </div>
 </form>
-</section><aside className="form-aside"><div className="card pad"><span className="aside-icon"><Icon name="box" size={24}/></span><h3>Order checklist</h3><p>Include dimensions, materials, artwork, and delivery requirements in the production brief.</p><hr/><div className="aside-step"><Icon name="check"/><span>A unique order ID is generated automatically.</span></div><div className="aside-step"><Icon name="users"/><span>Assign a team member from order details after creation.</span></div><div className="aside-step"><Icon name="clock"/><span>New orders start with the New status.</span></div></div></aside></div>
+</section><aside className="form-aside"><div className="card pad"><span className="aside-icon"><Icon name="box" size={24}/></span><h3>Order checklist</h3><p>Include dimensions, materials, artwork, and delivery requirements in the production brief.</p><hr/><div className="aside-step"><Icon name="check"/><span>A unique order ID is generated automatically.</span></div><div className="aside-step"><Icon name="users"/><span>Assign a team member when the order reaches Making.</span></div><div className="aside-step"><Icon name="clock"/><span>New orders start with the New status.</span></div></div></aside></div>
 </>}
 function Detail({user}:{user:User}){const{id=''}=useParams();
-const[confirmDelete,setConfirmDelete]=useState(false),[deleting,setDeleting]=useState(false),[assigning,setAssigning]=useState(false),[success,setSuccess]=useState('');
+const[confirmDelete,setConfirmDelete]=useState(false),[deleting,setDeleting]=useState(false),[assigning,setAssigning]=useState(false),[assignee,setAssignee]=useState(''),[success,setSuccess]=useState('');
 const[order,setOrder]=useState<Order|null>(null),[users,setUsers]=useState<User[]>([]),[note,setNote]=useState(''),[saving,setSaving]=useState(false),[editing,setEditing]=useState(false),[error,setError]=useState('');
 const load=()=>api.get('/orders/'+id).then(r=>setOrder(r.data));
 useEffect(()=>{load().catch(()=>setError('Unable to load this order or access denied.'));
-if(user.role!=='EMPLOYEE')api.get('/users').then(r=>setUsers(r.data)).catch(()=>setError('Unable to load assignment candidates.'))},[id]);
+api.get('/users').then(r=>setUsers(r.data)).catch(()=>setError('Unable to load assignment candidates.'))},[id]);
 if(!order&&error)return <ErrorState message={error} retry={()=>load().catch(()=>setError('Unable to load this order.'))}/>;
 if(!order)return <Loading label="Loading order…"/>;
 const flow:Status[]=FLOW.includes(order.status)?FLOW:['NEW','ASSIGNED','IN_PROGRESS','COMPLETED'];
-const next=FLOW.includes(order.status)?FLOW[FLOW.indexOf(order.status)+1]:undefined;
 const assigned=order.assignments.some(a=>a.user.id===user.id);
 async function move(status:Status){setSaving(true);setError('');setSuccess('');try{await api.post('/orders/'+id+'/status',{status,note});
 setNote('');
@@ -128,19 +127,19 @@ await load();setSuccess('Order status updated.')}catch{setError('Unable to updat
 <div>
 <span className="eyebrow">ASSIGNED TEAM</span>
 <p>{order.assignments.map(a=>`${a.user.name} (assigned ${new Date(a.assignedAt).toLocaleString()})`).join(', ')||'Nobody has been assigned yet.'}</p>
-</div>{user.role!=='EMPLOYEE'&&<select aria-label="Assign or reassign order" value="" disabled={assigning} onChange={async e=>{const userId=e.target.value;if(!userId)return;setAssigning(true);setError('');setSuccess('');try{await api.post('/orders/'+id+'/assignments',{userId});await load();setSuccess('Assignment updated. This order remains visible to everyone.')}catch{setError('Assignment failed. Please try again.')}finally{setAssigning(false)}}}>
-<option value="" disabled>{assigning?'Updating assignment…':order.assignments.length?'Reassign order…':'Assign team member…'}</option>{users.filter(u=>!order.assignments.some(a=>a.user.id===u.id)).map(u=>
-<option key={u.id} value={u.id}>{u.name}</option>)}</select>}</div>
+</div>{order.status==='MAKING'?<div className="assignment-controls"><label>Team member<select aria-label="Assign or reassign order" value={assignee} disabled={assigning} onChange={e=>setAssignee(e.target.value)}>
+<option value="">Select team member…</option>{users.filter(u=>!order.assignments.some(a=>a.user.id===u.id)).map(u=>
+<option key={u.id} value={u.id}>{u.name}</option>)}</select></label><button disabled={assigning||saving||!assignee} onClick={async()=>{setAssigning(true);setError('');setSuccess('');try{await api.post('/orders/'+id+'/assignments',{userId:assignee});setAssignee('');await load();setSuccess('Assignment updated. This order remains visible to everyone.')}catch{setError('Assignment failed. The order must still be in Making. Please refresh and try again.')}finally{setAssigning(false)}}}>{assigning?'Updating assignment…':order.assignments.length?'Reassign order':'Assign order'}</button></div>:<p className="muted">Assignment is available during Making.</p>}</div>
 </section>
 <section className="card pad">
 <span className="eyebrow">WORKFLOW</span>
-<h2>Order progress</h2>{user.role==='EMPLOYEE'&&!assigned&&<div className="view-only"><Icon name="users" size={18}/><div><strong>You’re viewing a shared order</strong><p>You can follow its progress here. Assigned staff, Managers, and Admins can make updates. Ask a Manager or Admin to change the assignment.</p></div></div>}
+<h2>Order progress</h2>
 <div className="workflow-current"><span>Current status</span><Badge status={order.status}/></div><div className="steps">{flow.map((s,i)=>
 <div className={flow.indexOf(s)<=flow.indexOf(order.status)?'done':''} key={s}>
-<b>{flow.indexOf(s)<flow.indexOf(order.status)?'✓':i+1}</b>{STATUS_LABEL[s]}</div>)}</div>{(user.role!=='EMPLOYEE'||assigned)&&<div className="advance">
+<b>{flow.indexOf(s)<flow.indexOf(order.status)?'✓':i+1}</b>{STATUS_LABEL[s]}</div>)}</div><div className="advance">
 <label>Progress note<textarea value={note} onChange={e=>setNote(e.target.value)}/></label>
-<label>Update status<select value="" disabled={saving} onChange={e=>e.target.value&&move(e.target.value as Status)}><option value="">Select status…</option>{STATUSES.filter(s=>s!==order.status&&(user.role!=='EMPLOYEE'||(!['COMPLETED','CANCELLED'].includes(order.status)&&(['IN_PROGRESS','PENDING','COMPLETED'].includes(s)||s===next)))).map(s=><option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></label>
-</div>}
+<label>Update status<select value="" disabled={saving||assigning} onChange={e=>e.target.value&&move(e.target.value as Status)}><option value="">Select status…</option>{STATUSES.map(s=><option key={s} value={s} disabled={s===order.status}>{STATUS_LABEL[s]}{s===order.status?' (current)':''}</option>)}</select></label>
+</div>
 {(user.role!=='EMPLOYEE'||assigned)&&<details className="edit-panel"><summary>Edit order <Icon name="settings" size={16}/></summary><form onSubmit={async e=>{e.preventDefault();const f=new FormData(e.currentTarget);setEditing(true);setError('');setSuccess('');try{await api.patch('/orders/'+id,{customerName:f.get('customerName'),description:f.get('description'),orderType:f.get('orderType'),priority:Number(f.get('priority'))});await load();setSuccess('Order updated successfully.')}catch{setError('Unable to save order')}finally{setEditing(false)}}}><p className="muted">Update the order’s customer and production details.</p><label>Customer<input name="customerName" defaultValue={order.customerName} required/></label><label>Description<textarea name="description" defaultValue={order.description} required/></label><label>Type<input name="orderType" defaultValue={order.orderType} required/></label><label>Priority<select name="priority" defaultValue={order.priority}>{PRIORITIES.map((p,i)=><option key={p} value={i}>{p}</option>)}</select></label><button disabled={editing}>{editing?'Saving…':'Save changes'}</button></form></details>}
 </section>
 </div>

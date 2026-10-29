@@ -11,7 +11,7 @@
 
 ## API shape
 
-Routes are resource-oriented under `/api`. JWT authentication is checked centrally; Admin-only operations use a dedicated role guard. Staff can update only assigned orders, using operational statuses or advancing legacy production stages. Managers can assign/reassign and access workload reports. Every accepted transition updates `Order.status` and appends an `OrderStatusHistory` record in the same database update.
+Routes are resource-oriented under `/api`. JWT authentication is checked centrally; Admin-only operations use a dedicated role guard. Every active authenticated user can change any order to any other supported status, including reopening completed/cancelled orders. All roles can assign/reassign during Making; the API locks the order while checking its stage and replacing the assignment. Staff can edit details only on assigned orders. Managers and Admins access workload reports. Every accepted transition updates `Order.status` and appends an `OrderStatusHistory` record in the same database update.
 
 ## Frontend pages and components
 

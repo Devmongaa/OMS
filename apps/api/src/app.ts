@@ -99,7 +99,7 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
 app.get('/api/auth/me', auth, (req, res) => res.json(req.user));
 
 
-app.get('/api/users', auth, manager, asyncRoute(async (_, res) => res.json(await prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, email: true, role: true }, orderBy: { name: 'asc' } }))));
+app.get('/api/users', auth, asyncRoute(async (_, res) => res.json(await prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, email: true, role: true }, orderBy: { name: 'asc' } }))));
 
 app.get('/api/orders', auth, asyncRoute(async (req, res) => {
   const where = orderFilter(req.query, req.user!);
@@ -139,31 +139,33 @@ app.delete('/api/orders/:id', auth, admin, asyncRoute(async (req, res) => {
 }));
 
 app.post('/api/orders/:id/status', auth, asyncRoute(async (req, res) => {
-  if (!(await allowedOnOrder(req, res))) return;
  const data = z.object({ status: z.nativeEnum(OrderStatus), note: z.string().max(1000).optional() }).parse(req.body);
  const order = await prisma.order.findUnique({ where: { id: param(req, 'id') } });
 
   if (!order) return fail(res, 404, 'Order not found');
- if (!canTransition(order.status, data.status, req.user!.role !== 'EMPLOYEE')) return fail(res, 409, 'This status transition is not allowed');
+ if (!canTransition(order.status, data.status)) return fail(res, 409, 'This status transition is not allowed');
 
-  res.json(await prisma.order.update({ where: { id: order.id, status:order.status, ...(req.user!.role==='EMPLOYEE'?{assignments:{some:{userId:req.user!.id}}}:{}) }, data: { status: data.status, statusHistory: { create: { fromStatus: order.status, toStatus: data.status, note: data.note, changedById: req.user!.id } } }, include: orderInclude }));
+  res.json(await prisma.order.update({ where: { id: order.id, status:order.status }, data: { status: data.status, statusHistory: { create: { fromStatus: order.status, toStatus: data.status, note: data.note, changedById: req.user!.id } } }, include: orderInclude }));
 
 }));
 
-app.post('/api/orders/:id/assignments', auth, manager, asyncRoute(async (req, res) => {
+app.post('/api/orders/:id/assignments', auth, asyncRoute(async (req, res) => {
   const {userId} = z.object({userId:z.string().min(1)}).parse(req.body);
   const user = await prisma.user.findUnique({where:{id:userId}});
   if (!user?.active) return fail(res, 400, 'Choose an active user');
   const order = await prisma.$transaction(async tx => {
-    // Lock the parent row before replacing its assignment to serialize concurrent reassignments.
-    const current = await tx.order.update({where:{id:param(req,'id')},data:{updatedAt:new Date()}});
-    const newlyAssigned = ['NEW','ORDER_RECEIVED'].includes(current.status);
-    return tx.order.update({where:{id:current.id},data:{
+    // Serialize assignment against both reassignments and status updates.
+    const [current] = await tx.$queryRaw<{id:string;status:OrderStatus}[]>`
+      SELECT id, status FROM "Order" WHERE id = ${param(req,'id')} FOR UPDATE
+    `;
+    if (!current) return {error:'Order not found',status:404} as const;
+    if (current.status !== 'MAKING') return {error:'Orders can only be assigned or reassigned during Making',status:409} as const;
+    return {order:await tx.order.update({where:{id:current.id},data:{
       assignments:{deleteMany:{},create:{userId}},
-      ...(newlyAssigned?{status:'ASSIGNED',statusHistory:{create:{fromStatus:current.status,toStatus:'ASSIGNED',changedById:req.user!.id,note:'Order assigned'}}}:{})
-    },include:orderInclude});
+    },include:orderInclude})};
   });
-  res.json(order);
+  if (order.error !== undefined) return fail(res, order.status, order.error);
+  res.json(order.order);
 }));
 
 app.post('/api/orders/:id/files', auth, asyncRoute(async (req, res) => { if (!(await allowedOnOrder(req, res))) return; const data = z.object({ name: z.string().min(1), url: z.string().max(2048).url().refine(value => ['http:', 'https:'].includes(new URL(value).protocol), 'Use an HTTP or HTTPS file URL'), mimeType: z.string().optional(), kind: z.enum(['ARTWORK', 'REFERENCE', 'PRODUCTION', 'SHIPPING', 'OTHER']).default('OTHER') }).parse(req.body);

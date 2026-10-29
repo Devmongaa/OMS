@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {aging,orderFilter,orderSort} from './orders.js';
-import {canTransition} from './workflow.js';
 test('aging boundaries and terminal exclusions',()=>{
  const now=new Date('2026-10-10T12:00:00Z');
  for(const [days,color] of [[0,'green'],[1,'green'],[2,'yellow'],[3,'yellow'],[4,'orange'],[5,'orange'],[6,'red']] as const){
@@ -25,12 +24,4 @@ test('filters retain low priority and inclusive end date, rejecting invalid valu
 test('age sort reverses creation order and has stable tie breaker',()=>{
  assert.deepEqual(orderSort({sort:'age',direction:'desc'}),[{createdAt:'asc'},{serialNumber:'asc'}]);
  assert.throws(()=>orderSort({sort:'passwordHash'}));
-});
-test('staff can pause, resume, complete but cannot reopen or cancel',()=>{
- assert.equal(canTransition('ASSIGNED','IN_PROGRESS',false),true);
- assert.equal(canTransition('IN_PROGRESS','PENDING',false),true);
- assert.equal(canTransition('PENDING','COMPLETED',false),true);
- assert.equal(canTransition('COMPLETED','IN_PROGRESS',false),false);
- assert.equal(canTransition('IN_PROGRESS','CANCELLED',false),false);
- assert.equal(canTransition('COMPLETED','NEW',true),true);
 });

@@ -32,3 +32,5 @@ input,select,textarea{display:block;width:100%;min-width:0;margin-top:6px;paddin
 .report-table th:first-child,.report-table td:first-child{position:sticky;left:0;z-index:1;background:var(--surface);box-shadow:1px 0 0 var(--line)}
 .report-table th:first-child{background:var(--bg)}
 .report-table tr:hover td:first-child{background:var(--bg)}
+
+.assignment-controls{display:flex;align-items:end;flex-wrap:wrap;gap:10px}.assignment-controls label{flex:1;min-width:180px}.assignment-controls button{flex-shrink:0}
