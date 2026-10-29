@@ -4,11 +4,16 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {StaticRouter} from 'react-router-dom';
 import {AgeBadge,OrderTable,ErrorState,Loading} from './ui';
 import {Layout} from './shell';
-import {Order,User} from './types';
+import {Order,User,STATUSES,STATUS_LABEL} from './types';
 const user:User={id:'staff',name:'Test Staff',email:'staff@example.test',role:'EMPLOYEE'};
 const order:Order={id:'one',orderNumber:'OMS-123',serialNumber:123,customerName:'A & B <script>',orderType:'Print',description:'Brief',quantity:1,status:'PENDING',priority:3,createdAt:'2026-10-21T12:00:00Z',updatedAt:'2026-10-29T12:00:00Z',ageDays:8,ageColor:'red',assignments:[{user,assignedAt:'2026-10-21T12:00:00Z'}]};
 const render=(element:React.ReactNode)=>renderToStaticMarkup(<StaticRouter location="/orders">{element}</StaticRouter>);
 describe('order presentation regressions',()=>{
+ it('retires Assigned from status choices while retaining its history label',()=>{
+  expect(STATUSES).not.toContain('ASSIGNED');
+  expect(STATUSES).toContain('MAKING');
+  expect(STATUS_LABEL.ASSIGNED).toBe('Assigned');
+ });
  it('uses API-provided aging without recalculating thresholds',()=>{
   expect(render(<AgeBadge order={order}/>)).toContain('8d · Overdue');
   expect(render(<AgeBadge order={{...order,ageDays:99,ageColor:'green'}}/>)).toContain('99d · Recent');

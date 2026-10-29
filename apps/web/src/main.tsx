@@ -95,7 +95,7 @@ useEffect(()=>{load().catch(()=>setError('Unable to load this order or access de
 api.get('/users').then(r=>setUsers(r.data)).catch(()=>setError('Unable to load assignment candidates.'))},[id]);
 if(!order&&error)return <ErrorState message={error} retry={()=>load().catch(()=>setError('Unable to load this order.'))}/>;
 if(!order)return <Loading label="Loading order…"/>;
-const flow:Status[]=FLOW.includes(order.status)?FLOW:['NEW','ASSIGNED','IN_PROGRESS','COMPLETED'];
+const flow:Status[]=FLOW.includes(order.status)?FLOW:['NEW','IN_PROGRESS','MAKING','COMPLETED'];
 const assigned=order.assignments.some(a=>a.user.id===user.id);
 async function move(status:Status){setSaving(true);setError('');setSuccess('');try{await api.post('/orders/'+id+'/status',{status,note});
 setNote('');

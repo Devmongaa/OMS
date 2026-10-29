@@ -5,5 +5,6 @@ export const WORKFLOW: OrderStatus[] = [
 ];
 
 export function canTransition(from: OrderStatus, to: OrderStatus) {
-  return from !== to;
+  // ASSIGNED remains in the enum solely to preserve existing history.
+  return to !== 'ASSIGNED' && from !== to;
 }

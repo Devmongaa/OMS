@@ -4,5 +4,6 @@ export type Order = { id:string; serialNumber:number; orderType:string; ageDays:
 export const STATUS_LABEL: Record<Status,string> = { NEW:'New', ASSIGNED:'Assigned', IN_PROGRESS:'In progress', PENDING:'Pending', CANCELLED:'Cancelled', ORDER_RECEIVED:'Order received', DESIGNING:'Designing', CUTTING_AND_PRINTING:'Cutting & printing', MAKING:'Making', PACKING_AND_DISPATCH:'Packing & dispatch', COMPLETED:'Completed' };
 export const FLOW: Status[] = ['ORDER_RECEIVED','DESIGNING','CUTTING_AND_PRINTING','MAKING','PACKING_AND_DISPATCH','COMPLETED'];
 
-export const STATUSES=Object.keys(STATUS_LABEL) as Status[];
+// Keep the legacy label for historical events; never offer it as a current status.
+export const STATUSES=(Object.keys(STATUS_LABEL) as Status[]).filter(status=>status!=='ASSIGNED');
 export const PRIORITIES=['Low','Medium','High','Urgent'];

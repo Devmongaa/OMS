@@ -1,6 +1,6 @@
 # Order Management System (OMS)
 
-An internal application for manually managed orders with Admin, Manager, and Staff access. New orders use New, Assigned, In Progress, Pending, Completed, and Cancelled statuses. Existing production-stage orders and their histories remain supported.
+An internal application for manually managed orders with Admin, Manager, and Staff access. New orders use New, In Progress, Pending, Completed, and Cancelled statuses. Existing production-stage orders and their histories remain supported.
 
 Admins manage orders, users, roles, and aging settings. Managers view and edit all orders, assign/reassign work, update statuses, and access workload reports. All authenticated users see every order, regardless of creator or assignment. Every active signed-in user can change any order to any other supported status, including reopening completed/cancelled orders. Everyone can assign or reassign orders during Making. Staff edit order details only for their assigned orders. The directory defaults to All orders and offers an Assigned to me view. All roles can create orders; Staff-created orders are automatically assigned to their creator. Permissions are enforced by the API and UI.
 
@@ -53,3 +53,5 @@ If the UI reports that the database needs an update, run `npm run db:deploy` fro
 See [DEPLOYMENT.md](DEPLOYMENT.md) for separate-provider deployment, resource limits, and performance review results.
 
 All authenticated roles can create orders. Managers and Admins can edit any order; Staff can edit only currently assigned orders. Staff-created orders are automatically assigned to their creator and start as New. Order deletion remains Admin-only.
+
+The Assigned status is retired. Deploy migrations with `npm run db:deploy` to move existing Assigned orders to Making without changing their assignees or assignment timestamps. Historical Assigned events remain readable. The legacy report API field `assigned` is retained for compatibility, but its retired status column is hidden in the UI.

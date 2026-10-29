@@ -69,6 +69,7 @@ async function main() {
     await request('/orders/'+order.id+'/status',s,'POST',{status:'MAKING'});
     await request('/orders/'+order.id+'/status',s,'POST',{status:'MAKING'},409);
     await request('/orders/'+order.id+'/status',s,'POST',{status:'INVALID'},400);
+    await request('/orders/'+order.id+'/status',s,'POST',{status:'ASSIGNED'},409);
     await request('/orders/'+order.id+'/status',null,'POST',{status:'PENDING'},401);
     await request('/orders/'+order.id+'/assignments',null,'POST',{userId:users.staff.id},401);
     updated=await request('/orders/'+order.id+'/assignments',s,'POST',{userId:users.staff.id});
